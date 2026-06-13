@@ -16,6 +16,7 @@ METRICS_CSV = Path("/workspace/shared/minicluster/live_metrics.csv")
 HITL_FILE   = Path("/workspace/shared/hitl_queue.jsonl")
 AUDIT_FILE    = Path("/workspace/shared/audit_log.jsonl")
 FORECAST_FILE = Path("/workspace/shared/uc3_forecasts.jsonl")
+SILENCE_FILE  = Path("/workspace/shared/uc5_silence.jsonl")
 
 SERVICES = {"payments": 7001, "auth": 7002, "checkout": 7003, "fraud": 7004}
 
@@ -204,9 +205,10 @@ if auto:
 df  = load_metrics()
 lat = latest(df)
 
-t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs([
+t1, t2, t3, t4, t5, t6, t7, t8, t9 = st.tabs([
     "❤️ Health", "📈 Live Telemetry", "⚠️ Anomalies",
-    "💥 Fault Injection", "🤖 AI Actions", "🛑 HITL Queue", "🕸️ Topology", "📈 Trend Forecast"
+    "💥 Fault Injection", "🤖 AI Actions", "🛑 HITL Queue",
+    "🕸️ Topology", "📈 Trend Forecast", "🔇 Silence"
 ])
 
 # TAB 1 — HEALTH
@@ -591,3 +593,115 @@ with t8:
 To create a visible trend: inject escalating latency using the **Fault Injection** tab,
 then run the forecast cell after a few minutes.
         """)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 9 — UC-5 SILENCE DETECTION
+# ══════════════════════════════════════════════════════════════════════════════
+with t9:
+    st.subheader("UC-5 — Silent Failure / Absence of Signal Detection")
+    st.caption("Detects services that stopped reporting, flatlined, or dropped to zero traffic · 🧠 GPU reasoning on findings")
+
+    st.info(
+        "**Three detection modes:** "
+        "🔴 **Gap** — service not reported in >3min. "
+        "🟡 **Flatline** — metric std dev ≈ 0 (stuck/dead collector). "
+        "🟡 **Zero-RPS** — service alive but serving no traffic."
+    )
+    st.divider()
+
+    # Live gap check directly from metrics (no notebook needed for basic view)
+    st.markdown("### ⚡ Live Gap Check (from metrics)")
+    if df.empty:
+        st.warning("No metrics loaded.")
+    else:
+        now_ts = df["timestamp"].max()
+        gap_rows = []
+        for svc in ["payments", "auth", "checkout", "fraud"]:
+            svc_df = df[df["service"] == svc]
+            if svc_df.empty:
+                gap_rows.append({"service": svc, "last_seen": "NEVER", "gap_mins": "∞", "status": "🔴 MISSING"})
+            else:
+                last_ts  = svc_df["timestamp"].max()
+                gap_mins = (now_ts - last_ts).total_seconds() / 60
+                if gap_mins > 3:
+                    status = "🔴 SILENT"
+                elif gap_mins > 1.5:
+                    status = "🟡 DELAYED"
+                else:
+                    status = "✅ OK"
+                gap_rows.append({
+                    "service":   svc,
+                    "last_seen": str(last_ts),
+                    "gap_mins":  round(gap_mins, 2),
+                    "status":    status,
+                })
+        gap_df = pd.DataFrame(gap_rows)
+        st.dataframe(gap_df, use_container_width=True)
+
+        # Alert banner if any silent
+        silent_svcs = [r["service"] for r in gap_rows if "SILENT" in r["status"] or "MISSING" in r["status"]]
+        if silent_svcs:
+            st.error(f"🔴 Silent services detected: {', '.join(silent_svcs)}")
+        else:
+            st.success("✅ All services reporting within expected interval")
+
+    st.divider()
+
+    # Full findings from notebook UC-5 run
+    st.markdown("### 📋 Full Silence Analysis (from notebook UC-5)")
+    if SILENCE_FILE.exists() and SILENCE_FILE.stat().st_size > 0:
+        findings = [json.loads(l) for l in SILENCE_FILE.read_text().strip().split("\n") if l.strip()]
+        fdf = pd.DataFrame(findings)
+
+        critical = [f for f in findings if f["severity"] == "CRITICAL"]
+        high     = [f for f in findings if f["severity"] == "HIGH"]
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("🔴 CRITICAL", len(critical))
+        c2.metric("🟡 HIGH",     len(high))
+        c3.metric("Total findings", len(findings))
+
+        if findings:
+            st.divider()
+            for f in findings:
+                icon = "🔴" if f["severity"] == "CRITICAL" else "🟡"
+                ftype = f.get("type", "UNKNOWN")
+                with st.expander(f"{icon} {f['service'].upper()} — {ftype} — {f['severity']}"):
+                    st.markdown(f"**Detail:** {f.get('detail','')}")
+                    detail_cols = {k: v for k, v in f.items()
+                                   if k not in ("detail","timestamp","severity","type","service")}
+                    if detail_cols:
+                        st.json(detail_cols)
+                    st.caption(f"Detected: {f.get('timestamp','')}")
+
+            st.divider()
+            st.markdown("**Full findings table**")
+            st.dataframe(fdf, use_container_width=True)
+    else:
+        st.info("No silence analysis yet. Run **Cell 15** (UC-5) in the notebook.")
+
+    # Latest GPU narrative from audit
+    st.divider()
+    st.markdown("### 🧠 Latest GPU Analysis (Qwen3-30B)")
+    if AUDIT_FILE.exists():
+        audit_recs = [json.loads(l) for l in AUDIT_FILE.read_text().strip().split("\n") if l.strip()]
+        uc5_audits = [r for r in audit_recs
+                      if r.get("event_type") == "UC5_FINDINGS" and r.get("narrative")]
+        if uc5_audits:
+            latest = sorted(uc5_audits, key=lambda x: x.get("timestamp", ""))[-1]
+            st.warning(latest["narrative"])
+            st.caption(f"Generated at {latest.get('timestamp','')} · "
+                       f"{latest.get('finding_count',0)} findings")
+        else:
+            st.info("No GPU analysis yet — run Cell 15 in the notebook with active silence conditions.")
+    else:
+        st.info("No audit log yet.")
+
+    st.divider()
+    st.markdown("### 🧪 How to trigger a silence test")
+    st.code("""# In notebook Cell 16 (test cell) or Terminal 2:
+supervisorctl -c /workspace/shared/minicluster/supervisord.conf stop collector
+# Wait 4 minutes, then run Cell 15 — gap will appear
+# Restore:
+supervisorctl -c /workspace/shared/minicluster/supervisord.conf restart collector""",
+            language="bash")
