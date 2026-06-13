@@ -465,6 +465,10 @@ with st.sidebar:
             ("hitl",      "🛑", "HITL Queue",       str(_hitl_pending) if _hitl_pending else None),
             ("aiactions", "🤖", "AI Actions",       None),
         ]),
+        ("ADVANCED GPU", [
+            ("rlhf",  "🔁", "RLHF Reward Model", None),
+            ("lstm",  "🎯", "LSTM Forecasting",   None),
+        ]),
     ]
 
     # Determine active page from session state
@@ -1319,3 +1323,256 @@ if t14:
                 st.caption(f"Generated at {latest_n.get('timestamp','')[:19]} · {latest_n.get('anomalous_count',0)} anomalous logs · GPU: {latest_n.get('gpu_time_secs',0)}s")
             else:
                 st.info("No GPU narrative yet — run Cell 6 in `log_embedding.ipynb`.")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: RLHF — Reward Model from Operator Feedback
+# ══════════════════════════════════════════════════════════════════════════════
+REWARD_MODEL  = Path("/workspace/shared/rlhf_reward_model.pt")
+REWARD_META   = Path("/workspace/shared/rlhf_meta.json")
+RLHF_LOG      = Path("/workspace/shared/rlhf_log.jsonl")
+RLHF_CURVE    = Path("/workspace/shared/rlhf_learning_curve.png")
+
+if _PAGE == "rlhf":
+    page_header("🔁 RLHF Lite — Reward Model from Operator Feedback",
+                "Learns approve/reject patterns · biases GPU recommendations · PyTorch MLP on MI300X")
+    st.info(
+        "**What this does:** Every HITL approve/reject is a training signal. "
+        "A PyTorch MLP trained on MI300X learns which remediation actions operators approve. "
+        "Future RCA recommendations are ranked by predicted approval probability — "
+        "the agent gets smarter with every decision."
+    )
+
+    # Model status
+    st.markdown("### 🏋️ Reward Model Status")
+    rm1, rm2, rm3, rm4 = st.columns(4)
+    model_ready = REWARD_MODEL.exists()
+    rm1.metric("Model", "✅ Trained" if model_ready else "❌ Not trained")
+
+    n_decisions = 0
+    approval_rate = 0.0
+    final_acc = 0.0
+    if REWARD_META.exists():
+        try:
+            rmeta = json.loads(REWARD_META.read_text())
+            n_decisions   = rmeta.get("n_decisions", 0)
+            approval_rate = rmeta.get("approval_rate", 0)
+            final_acc     = rmeta.get("final_acc", 0)
+            rm2.metric("Decisions used",  n_decisions)
+            rm3.metric("Model accuracy",  f"{final_acc:.0%}")
+            rm4.metric("Approval rate",   f"{approval_rate:.0%}")
+            st.caption(f"Trained: {rmeta.get('timestamp','')[:19]} · Device: {rmeta.get('device','?')} · Epochs: {rmeta.get('epochs',0)}")
+        except:
+            rm2.metric("Decisions", "parse error")
+    else:
+        rm2.metric("Decisions used", 0)
+        rm3.metric("Model accuracy", "—")
+        rm4.metric("Approval rate",  "—")
+
+    if not model_ready:
+        st.divider()
+        st.markdown("""
+**Build the reward model:**
+1. Open `rlhf_reward_model.ipynb`
+2. Run Cell 6 first (bootstrap synthetic decisions if HITL is empty)
+3. Run Cells 1 → 2 → 3 → 4 → 5 → 7
+4. Refresh this tab
+        """)
+    else:
+        # Learning curve
+        if RLHF_CURVE.exists():
+            st.divider()
+            st.markdown("### 📊 Reward Model Dashboard (MI300X)")
+            st.image(str(RLHF_CURVE),
+                     caption="Left: training loss · Centre: action approval scores · Right: decision history")
+
+        # Latest RLHF recommendation
+        st.divider()
+        st.markdown("### 🧠 Latest GPU-Biased Recommendation")
+        if RLHF_LOG.exists():
+            rlhf_recs = [json.loads(l) for l in RLHF_LOG.read_text().strip().split("\n") if l.strip()]
+            recs_reco = [r for r in rlhf_recs if r.get("event_type") == "RLHF_RECOMMENDATION"]
+            if recs_reco:
+                latest_r = sorted(recs_reco, key=lambda x: x.get("timestamp",""))[-1]
+                col_r1, col_r2 = st.columns([2, 1])
+                with col_r1:
+                    st.success(latest_r.get("recommendation",""))
+                with col_r2:
+                    st.metric("Top action",    latest_r.get("top_action","?"))
+                    st.metric("Approval prob", f"{latest_r.get('approval_prob',0):.0%}")
+                    st.metric("GPU time",      f"{latest_r.get('gpu_time_secs',0):.2f}s")
+                    st.caption(f"Based on {latest_r.get('n_decisions',0)} operator decisions")
+            else:
+                st.info("No recommendations yet — run Cells 4 & 5 in the notebook.")
+
+        # Scored actions table
+        st.divider()
+        st.markdown("### 📋 Action Approval Scores (RLHF Ranked)")
+        rlhf_scored = [r for r in (json.loads(l) for l in RLHF_LOG.read_text().strip().split("\n") if l.strip()
+                       and '"RLHF_ACTIONS_SCORED"' in l)] if RLHF_LOG.exists() else []
+        if rlhf_scored:
+            latest_scored = sorted(rlhf_scored, key=lambda x: x.get("timestamp",""))[-1]
+            scored_actions = latest_scored.get("scored_actions", [])
+            if scored_actions:
+                rows = []
+                for i, a in enumerate(scored_actions):
+                    prob = a.get("approval_prob", 0)
+                    icon = "🟢" if prob > 0.7 else ("🟡" if prob > 0.4 else "🔴")
+                    bar  = "█" * int(prob * 20) + "░" * (20 - int(prob * 20))
+                    rows.append({
+                        "rank":   i + 1,
+                        "action": a.get("action","?"),
+                        "blast":  a.get("blast_radius","?"),
+                        "approval %": f"{prob:.0%}",
+                        "bar":    bar,
+                        "signal": icon,
+                    })
+                st.dataframe(pd.DataFrame(rows), use_container_width=True)
+        else:
+            st.info("No scored actions yet — run Cell 4 in notebook.")
+
+        # Decision history
+        st.divider()
+        st.markdown("### 📜 HITL Decision History (Training Data)")
+        if HITL_FILE.exists():
+            all_hitl = [json.loads(l) for l in HITL_FILE.read_text().strip().split("\n") if l.strip()]
+            decided  = [x for x in all_hitl if x.get("status") in ("APPROVED","REJECTED")]
+            if decided:
+                hist_rows = []
+                for d in decided[-20:]:
+                    hist_rows.append({
+                        "id":      d.get("hitl_id","?")[-12:],
+                        "service": d.get("service","?"),
+                        "source":  d.get("source","?"),
+                        "blast":   d.get("blast_radius","—"),
+                        "status":  ("✅ APPROVED" if d["status"]=="APPROVED" else "❌ REJECTED"),
+                        "synthetic": "🔬" if d.get("synthetic") else "👤",
+                    })
+                st.dataframe(pd.DataFrame(hist_rows).astype(str), use_container_width=True)
+            else:
+                st.info("No resolved decisions yet — approve/reject items in HITL Queue to generate training data.")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: LSTM — GPU Anomaly Forecasting
+# ══════════════════════════════════════════════════════════════════════════════
+LSTM_MODEL   = Path("/workspace/shared/lstm_forecast_model.pt")
+LSTM_META    = Path("/workspace/shared/lstm_meta.json")
+LSTM_RESULTS = Path("/workspace/shared/lstm_forecasts.jsonl")
+LSTM_PLOT    = Path("/workspace/shared/lstm_forecast_plot.png")
+
+if _PAGE == "lstm":
+    page_header("🎯 LSTM Anomaly Forecasting",
+                "2-layer LSTM + attention on MI300X · 10-min ahead · replaces linear regression")
+    st.info(
+        "**Why LSTM beats linear regression:** The sequence model learns the *shape* of how metrics "
+        "degrade before a fault — rising CPU followed by latency, then errors. "
+        "Linear regression only fits a slope. LSTM sees the pattern. "
+        "Trained in ~2min on MI300X, forecasts 10 minutes ahead."
+    )
+
+    # Model status
+    st.markdown("### 🏋️ Model Status")
+    lm1, lm2, lm3, lm4 = st.columns(4)
+    lstm_ready = LSTM_MODEL.exists()
+    lm1.metric("Model", "✅ Trained" if lstm_ready else "❌ Not trained")
+
+    if LSTM_META.exists():
+        try:
+            lmeta = json.loads(LSTM_META.read_text())
+            lm2.metric("Best val loss",  f"{lmeta.get('best_val_loss',0):.5f}")
+            lm3.metric("Training time",  f"{lmeta.get('training_secs',0):.0f}s")
+            lm4.metric("Pred horizon",   f"{lmeta.get('pred_steps',0)} min")
+            st.caption(
+                f"Seq len: {lmeta.get('seq_len',0)}min  ·  "
+                f"Features: {', '.join(lmeta.get('features',[]))}  ·  "
+                f"Device: {lmeta.get('device','?')}  ·  "
+                f"Trained: {lmeta.get('timestamp','')[:19]}"
+            )
+        except:
+            lm2.metric("Meta", "parse error")
+    else:
+        lm2.metric("Val loss", "—"); lm3.metric("Train time", "—"); lm4.metric("Horizon", "—")
+
+    if not lstm_ready:
+        st.divider()
+        st.markdown("""
+**Train the LSTM:**
+1. Open `lstm_anomaly_forecast.ipynb`
+2. Run Cells 1 → 2 → 3 → 4 (trains on MI300X, ~2 min)
+3. Run Cells 5 → 6 → 7 (forecast + GPU advisory + plots)
+4. Refresh this tab
+        """)
+        st.code("# Watch GPU during training:\nwatch -n1 rocm-smi --showuse --showmemuse", language="bash")
+    else:
+        # Forecast plot
+        if LSTM_PLOT.exists():
+            st.divider()
+            st.markdown("### 📊 LSTM Forecast Dashboard (MI300X)")
+            st.image(str(LSTM_PLOT),
+                     caption="Top-left: training/val loss · 4 metric panels: now vs +10min · Bottom-right: breach heatmap")
+
+        # Latest forecasts table
+        st.divider()
+        st.markdown("### 📋 10-Minute Ahead Predictions")
+        if LSTM_RESULTS.exists() and LSTM_RESULTS.stat().st_size > 0:
+            lstm_recs = [json.loads(l) for l in LSTM_RESULTS.read_text().strip().split("\n") if l.strip()]
+            fc_recs   = [r for r in lstm_recs if r.get("event_type") == "LSTM_FORECAST"]
+            if fc_recs:
+                # Get latest forecast per service
+                latest_fc = {}
+                for r in fc_recs:
+                    latest_fc[r["service"]] = r
+
+                THRESH_MAP = {"cpu_utilization": 70, "latency_p95_ms": 500, "error_rate": 0.05, "mem_mb": 1800}
+                FEAT_SHORT = {"cpu_utilization": "CPU %", "latency_p95_ms": "Lat ms",
+                              "error_rate": "Err rate", "mem_mb": "Mem MB"}
+
+                fc_rows = []
+                for svc, fc in latest_fc.items():
+                    for feat, thresh in THRESH_MAP.items():
+                        cur  = fc.get("current",  {}).get(feat, 0)
+                        proj = fc.get("projected", {}).get(feat, 0)
+                        pct  = proj / thresh
+                        icon = "🔴 BREACH" if proj > thresh else ("🟡 APPROACHING" if pct > 0.8 and proj > cur else "🟢 OK")
+                        fc_rows.append({
+                            "service":    svc,
+                            "metric":     FEAT_SHORT[feat],
+                            "now":        f"{cur:.3f}",
+                            "+10min":     f"{proj:.3f}",
+                            "threshold":  thresh,
+                            "% of thresh": f"{pct:.0%}",
+                            "status":     icon,
+                        })
+
+                fdf_lstm = pd.DataFrame(fc_rows)
+                # Show breaches first
+                breach_rows = fdf_lstm[fdf_lstm["status"].str.contains("BREACH|APPROACHING")]
+                ok_rows     = fdf_lstm[fdf_lstm["status"].str.contains("OK")]
+
+                if not breach_rows.empty:
+                    st.error(f"⚠️ {len(breach_rows)} predicted breaches in next 10 minutes")
+                    st.dataframe(breach_rows.astype(str), use_container_width=True)
+                    st.divider()
+
+                st.markdown("**Full forecast table:**")
+                st.dataframe(fdf_lstm.astype(str), use_container_width=True)
+            else:
+                st.info("No forecast records yet — run Cell 5 in notebook.")
+        else:
+            st.info("No LSTM forecasts yet — run Cells 5 → 6 → 7 in `lstm_anomaly_forecast.ipynb`.")
+
+        # GPU advisory
+        st.divider()
+        st.markdown("### 🧠 GPU Proactive Advisory (Qwen3-30B + LSTM)")
+        if AUDIT_FILE.exists():
+            audit_all = [json.loads(l) for l in AUDIT_FILE.read_text().strip().split("\n") if l.strip()]
+            lstm_advisories = [r for r in audit_all if r.get("event_type") == "LSTM_ADVISORY"]
+            if lstm_advisories:
+                latest_adv = sorted(lstm_advisories, key=lambda x: x.get("timestamp",""))[-1]
+                st.warning(latest_adv.get("advisory",""))
+                st.caption(
+                    f"Generated: {latest_adv.get('timestamp','')[:19]}  ·  "
+                    f"Breach predictions: {latest_adv.get('breach_count',0)}  ·  "
+                    f"GPU: {latest_adv.get('gpu_time_secs',0):.2f}s"
+                )
+            else:
+                st.info("No advisory yet — run Cell 6 in notebook.")
