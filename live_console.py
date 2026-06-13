@@ -211,17 +211,29 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: 'Roboto', sans-serif !important;
 }
-.main { background: #f8f9fa !important; }
+.main, .stApp, [data-testid="stAppViewContainer"] { background: #f8f9fa !important; }
 .block-container { padding-top: 24px !important; padding-bottom: 40px !important; }
 
-/* ── Sidebar ── */
-section[data-testid="stSidebar"] {
+/* ── Sidebar — force white on all nested divs ── */
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"] > div,
+section[data-testid="stSidebar"] > div > div,
+section[data-testid="stSidebar"] > div > div > div,
+[data-testid="stSidebarContent"],
+[data-testid="stSidebarUserContent"] {
     background: #ffffff !important;
+    background-color: #ffffff !important;
+}
+section[data-testid="stSidebar"] {
     border-right: 1px solid #e0e0e0 !important;
     min-width: 210px !important;
     max-width: 210px !important;
 }
 section[data-testid="stSidebar"] > div { padding: 0 !important; }
+/* Sidebar text colour */
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] label { color: #3c4043 !important; }
 
 .sidebar-logo {
     padding: 18px 16px 14px 16px;
@@ -596,7 +608,7 @@ if t3:
         if anomalies:
             st.error(f"⚠️  {len(anomalies)} anomaly/-ies detected")
             adf = pd.DataFrame(anomalies)
-            st.dataframe(adf, use_container_width=True)
+            st.dataframe(adf.astype(str), use_container_width=True)
             st.divider()
             st.markdown("**Escalate to HITL queue**")
             sel_svc = st.selectbox("Select service to escalate", adf["service"].unique().tolist(), key="esc_svc")
@@ -662,7 +674,7 @@ if t5:
         if records:
             adf = pd.DataFrame(records)
             adf = adf.sort_values("timestamp", ascending=False) if "timestamp" in adf.columns else adf
-            st.dataframe(adf, use_container_width=True)
+            st.dataframe(adf.astype(str), use_container_width=True)
             if "event_type" in adf.columns:
                 st.divider(); st.markdown("**Event breakdown**")
                 st.bar_chart(adf["event_type"].value_counts())
@@ -710,7 +722,7 @@ if t6:
                             st.warning("Rejected."); st.rerun()
         if resolved:
             st.divider(); st.markdown("### ✅ Resolved items")
-            st.dataframe(pd.DataFrame(resolved), use_container_width=True)
+            st.dataframe(pd.DataFrame(resolved).drop(columns=["anomalies","faults","alerts","pre_metrics","post_metrics","deltas","fault_results"], errors="ignore").astype(str), use_container_width=True)
 
 if t7:
     page_header("🕸️  Service Topology", "Live dependency graph · GPU insight on anomalies")
@@ -814,7 +826,7 @@ if t8:
         def sev_icon(s): return "🔴" if s == "BREACH" else ("🟡" if s == "APPROACHING" else "✅")
         fdf["status"] = fdf["severity"].apply(sev_icon)
         display_cols = ["status","service","metric","current","projected","threshold","pct_of_thresh","r2","trend","delta"]
-        st.dataframe(fdf[[c for c in display_cols if c in fdf.columns]].sort_values("pct_of_thresh", ascending=False), use_container_width=True)
+        st.dataframe(fdf.astype(str)[[c for c in display_cols if c in fdf.columns]].sort_values("pct_of_thresh", ascending=False), use_container_width=True)
         st.divider()
         st.markdown("### 📉 Projection Comparison by Metric")
         metric_sel = st.selectbox("Metric", list(THRESHOLDS.keys()), key="uc3_metric")
@@ -892,7 +904,7 @@ if t9:
             with st.expander(f"{icon} {f['service'].upper()} — {f.get('type','?')} — {f['severity']}"):
                 st.markdown(f"**Detail:** {f.get('detail','')}")
                 st.caption(f"Detected: {f.get('timestamp','')}")
-        st.dataframe(fdf2, use_container_width=True)
+        st.dataframe(fdf2.astype(str), use_container_width=True)
     else:
         st.info("No silence analysis yet. Run **Cell 15** (UC-5) in the notebook.")
 
