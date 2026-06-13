@@ -205,183 +205,191 @@ def draw_topology(latest_metrics):
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500&family=Roboto+Mono:wght@400;500&display=swap');
 
-/* ── Global reset ── */
+/* ── Global ── */
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif !important;
+    font-family: 'Roboto', sans-serif !important;
 }
-.main { background: #080c14 !important; }
+.main { background: #f8f9fa !important; }
+.block-container { padding-top: 24px !important; padding-bottom: 40px !important; }
+
+/* ── Sidebar ── */
 section[data-testid="stSidebar"] {
-    background: #0d1117 !important;
-    border-right: 1px solid #1e2d40 !important;
-    min-width: 220px !important;
-    max-width: 220px !important;
+    background: #ffffff !important;
+    border-right: 1px solid #e0e0e0 !important;
+    min-width: 210px !important;
+    max-width: 210px !important;
 }
+section[data-testid="stSidebar"] > div { padding: 0 !important; }
 
-/* ── Sidebar nav items ── */
-.nav-section {
-    font-size: 9px;
+.sidebar-logo {
+    padding: 18px 16px 14px 16px;
+    border-bottom: 1px solid #e8eaed;
+}
+.sidebar-logo-title {
+    font-size: 15px;
     font-weight: 700;
-    letter-spacing: 0.12em;
-    color: #3d5a7a;
-    text-transform: uppercase;
-    padding: 18px 16px 6px 16px;
+    color: #1a73e8;
+    letter-spacing: -0.2px;
+    font-family: 'Google Sans', 'Roboto', sans-serif;
 }
-.nav-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 9px 16px;
-    border: none;
-    background: transparent;
-    color: #7a9ab5;
-    font-size: 13px;
-    font-weight: 400;
-    cursor: pointer;
-    text-align: left;
-    border-radius: 0;
-    transition: all 0.15s ease;
-    border-left: 3px solid transparent;
-    font-family: 'Inter', sans-serif;
-}
-.nav-btn:hover { background: #131d2b; color: #c8dff0; border-left-color: #1e4a6e; }
-.nav-btn.active { background: #0e2037; color: #38b2f4; border-left-color: #38b2f4; font-weight: 600; }
-.nav-icon { font-size: 14px; width: 18px; text-align: center; }
-.nav-badge {
-    margin-left: auto;
-    background: #ff1744;
-    color: white;
-    font-size: 9px;
-    font-weight: 700;
-    padding: 1px 5px;
-    border-radius: 8px;
-    font-family: 'JetBrains Mono', monospace;
-}
-.nav-badge.warn { background: #f59e0b; }
-.nav-badge.ok   { background: #00c853; }
-
-/* ── Top header bar ── */
-.top-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 0 20px 0;
-    border-bottom: 1px solid #1a2940;
-    margin-bottom: 24px;
-}
-.top-header-left h1 {
-    font-size: 20px !important;
-    font-weight: 700 !important;
-    color: #e8f4fd !important;
-    margin: 0 !important;
-    letter-spacing: -0.3px;
-}
-.top-header-left p {
-    font-size: 11px !important;
-    color: #3d6a8a !important;
-    margin: 2px 0 0 0 !important;
-    font-family: 'JetBrains Mono', monospace !important;
-}
-.status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
-    border-radius: 20px;
+.sidebar-logo-sub {
     font-size: 11px;
-    font-weight: 600;
-    font-family: 'JetBrains Mono', monospace;
+    color: #80868b;
+    margin-top: 2px;
+    font-family: 'Roboto Mono', monospace;
 }
-.status-pill.live { background: #0a2a0f; border: 1px solid #00c853; color: #00c853; }
-.status-pill.warn { background: #2a1a00; border: 1px solid #f59e0b; color: #f59e0b; }
 
-/* ── Page title inside content ── */
+.nav-section {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: #80868b;
+    text-transform: uppercase;
+    padding: 16px 16px 4px 16px;
+}
+
+/* ── Streamlit sidebar buttons restyled as nav items ── */
+section[data-testid="stSidebar"] [data-testid="stButton"] > button {
+    background: transparent !important;
+    border: none !important;
+    color: #3c4043 !important;
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    text-align: left !important;
+    padding: 8px 16px !important;
+    border-radius: 0 24px 24px 0 !important;
+    width: 100% !important;
+    margin: 1px 0 !important;
+    transition: background 0.1s !important;
+    box-shadow: none !important;
+}
+section[data-testid="stSidebar"] [data-testid="stButton"] > button:hover {
+    background: #f1f3f4 !important;
+    color: #1a73e8 !important;
+}
+
+/* ── Page title ── */
 .page-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #e8f4fd;
-    margin: 0 0 4px 0;
+    font-size: 22px;
+    font-weight: 400;
+    color: #202124;
+    margin: 0 0 2px 0;
+    font-family: 'Google Sans', 'Roboto', sans-serif;
     letter-spacing: -0.2px;
 }
 .page-subtitle {
     font-size: 12px;
-    color: #3d6a8a;
-    font-family: 'JetBrains Mono', monospace;
+    color: #80868b;
+    font-family: 'Roboto Mono', monospace;
     margin-bottom: 20px;
 }
 
-/* ── Metric cards ── */
+/* ── Metric cards — Google material card style ── */
 [data-testid="stMetric"] {
-    background: #0d1a27 !important;
-    border: 1px solid #1a2f45 !important;
-    border-radius: 8px !important;
-    padding: 14px 16px !important;
+    background: #ffffff !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 12px !important;
+    padding: 16px 20px !important;
+    box-shadow: 0 1px 3px rgba(60,64,67,.08) !important;
 }
-[data-testid="stMetricLabel"] { color: #5a8aaa !important; font-size: 11px !important; font-weight: 500 !important; text-transform: uppercase; letter-spacing: 0.05em; }
-[data-testid="stMetricValue"] { color: #e8f4fd !important; font-size: 22px !important; font-weight: 700 !important; font-family: 'JetBrains Mono', monospace !important; }
+[data-testid="stMetricLabel"] {
+    color: #5f6368 !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.06em !important;
+}
+[data-testid="stMetricValue"] {
+    color: #202124 !important;
+    font-size: 26px !important;
+    font-weight: 400 !important;
+    font-family: 'Google Sans', sans-serif !important;
+}
 
-/* ── Buttons ── */
-[data-testid="stButton"] > button {
-    background: #0e2037 !important;
-    border: 1px solid #1e4a6e !important;
-    color: #38b2f4 !important;
-    font-weight: 600 !important;
-    font-size: 12px !important;
+/* ── Buttons (main content area) ── */
+.main [data-testid="stButton"] > button {
+    background: #ffffff !important;
+    border: 1px solid #dadce0 !important;
+    color: #1a73e8 !important;
+    font-weight: 500 !important;
+    font-size: 13px !important;
     border-radius: 6px !important;
-    transition: all 0.15s !important;
+    padding: 6px 16px !important;
+    box-shadow: 0 1px 2px rgba(60,64,67,.1) !important;
+    transition: box-shadow 0.15s, background 0.15s !important;
 }
-[data-testid="stButton"] > button:hover {
-    background: #132d50 !important;
-    border-color: #38b2f4 !important;
+.main [data-testid="stButton"] > button:hover {
+    background: #f8f9fa !important;
+    box-shadow: 0 2px 6px rgba(60,64,67,.2) !important;
 }
-[data-testid="stButton"] > button[kind="primary"] {
-    background: #0a3d6b !important;
-    border-color: #38b2f4 !important;
+.main [data-testid="stButton"] > button[kind="primary"] {
+    background: #1a73e8 !important;
+    border-color: #1a73e8 !important;
     color: #ffffff !important;
+}
+.main [data-testid="stButton"] > button[kind="primary"]:hover {
+    background: #1557b0 !important;
 }
 
 /* ── Dataframes ── */
 [data-testid="stDataFrame"] {
-    border: 1px solid #1a2f45 !important;
-    border-radius: 8px !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 12px !important;
     overflow: hidden !important;
+    box-shadow: 0 1px 3px rgba(60,64,67,.08) !important;
 }
 
 /* ── Expanders ── */
 [data-testid="stExpander"] {
-    background: #0d1a27 !important;
-    border: 1px solid #1a2f45 !important;
-    border-radius: 8px !important;
+    background: #ffffff !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 2px rgba(60,64,67,.06) !important;
+}
+[data-testid="stExpander"]:hover {
+    box-shadow: 0 2px 6px rgba(60,64,67,.15) !important;
 }
 
-/* ── Info / warning / success / error boxes ── */
-[data-testid="stAlert"] { border-radius: 8px !important; border-left-width: 3px !important; }
+/* ── Alert boxes ── */
+[data-testid="stAlert"] {
+    border-radius: 10px !important;
+    border-left-width: 4px !important;
+}
 
 /* ── Divider ── */
-hr { border-color: #1a2940 !important; }
+hr { border-color: #e8eaed !important; }
 
-/* ── Sidebar logo area ── */
-.sidebar-logo {
-    padding: 20px 16px 12px 16px;
-    border-bottom: 1px solid #1e2d40;
-    margin-bottom: 4px;
-}
-.sidebar-logo-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: #38b2f4;
-    letter-spacing: 0.05em;
-}
-.sidebar-logo-sub {
-    font-size: 10px;
-    color: #2d4a62;
-    margin-top: 2px;
-    font-family: 'JetBrains Mono', monospace;
+/* ── Selectbox / dropdowns ── */
+[data-testid="stSelectbox"] > div > div {
+    border-radius: 8px !important;
+    border-color: #dadce0 !important;
+    background: #ffffff !important;
 }
 
-/* ── Hide default streamlit chrome ── */
+/* ── Text inputs ── */
+[data-testid="stTextInput"] > div > div > input {
+    border-radius: 8px !important;
+    border-color: #dadce0 !important;
+    background: #ffffff !important;
+}
+
+/* ── Status pills ── */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: 'Roboto Mono', monospace;
+}
+.status-pill.live { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+.status-pill.warn { background: #fef7e0; color: #b45309; border: 1px solid #fde293; }
+
+/* ── Hide Streamlit chrome ── */
 #MainMenu, footer, header { visibility: hidden; }
 [data-testid="stDecoration"] { display: none; }
 </style>
@@ -412,6 +420,7 @@ with st.sidebar:
         <div class="sidebar-logo-sub">AMD MI300X · Qwen3-30B</div>
     </div>
     """, unsafe_allow_html=True)
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
     # Auto-refresh toggle
     auto = st.toggle("Auto-refresh (10s)", value=False)
@@ -474,7 +483,7 @@ with st.sidebar:
         st.markdown('<div style="padding:8px 16px"><span class="status-pill live">● GPU LIVE</span></div>', unsafe_allow_html=True)
     else:
         st.markdown('<div style="padding:8px 16px"><span class="status-pill warn">⚠ GPU OFF</span></div>', unsafe_allow_html=True)
-    st.markdown(f'<div style="padding:4px 16px 8px;font-size:10px;color:#2d4a62;font-family:JetBrains Mono,monospace">{datetime.now().strftime("%H:%M:%S UTC")}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="padding:4px 16px 12px;font-size:10px;color:#80868b;font-family:Roboto Mono,monospace">{datetime.now().strftime("%H:%M:%S UTC")}</div>', unsafe_allow_html=True)
 
 # ── Page router — replaces st.tabs() ─────────────────────────────────────────
 _PAGE = st.session_state.get("page", "health")
