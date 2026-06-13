@@ -466,8 +466,9 @@ with st.sidebar:
             ("aiactions", "🤖", "AI Actions",       None),
         ]),
         ("ADVANCED GPU", [
-            ("rlhf",  "🔁", "RLHF Reward Model", None),
-            ("lstm",  "🎯", "LSTM Forecasting",   None),
+            ("rlhf",        "🔁", "RLHF Reward Model",   None),
+            ("lstm",        "🎯", "LSTM Forecasting",     None),
+            ("remediation", "⚙️", "Remediation Pipeline", None),
         ]),
     ]
 
@@ -1576,3 +1577,173 @@ if _PAGE == "lstm":
                 )
             else:
                 st.info("No advisory yet — run Cell 6 in notebook.")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: REMEDIATION — Planning + Execution + Reports
+# ══════════════════════════════════════════════════════════════════════════════
+REMEDIATION_FILE  = Path("/workspace/shared/remediation_plans.jsonl")
+REPORTS_DIR       = Path("/workspace/shared/incident_reports")
+MOCK_INFRA_LOG    = Path("/workspace/shared/mock_infra_calls.jsonl")
+PIPELINE_PLOT     = Path("/workspace/shared/remediation_pipeline_plot.png")
+
+if _PAGE == "remediation":
+    page_header("⚙️  Remediation Planning & Action Executor",
+                "pydantic-ai agents · typed RCA→Action schemas · mock K8s APIs · full audit trail")
+
+    st.info(
+        "**Full pipeline:** Live anomalies → GPU RCA → pydantic-ai RemediationPlanningAgent "
+        "→ typed Action schemas → Policy gate (auto/HITL) → Mock Infra API execution "
+        "→ Post-Incident Report. Run `remediation_executor.ipynb` Cells 1→7."
+    )
+
+    # ── Pipeline status ───────────────────────────────────────────────────
+    st.markdown("### 📊 Pipeline Status")
+    p1, p2, p3, p4, p5 = st.columns(5)
+
+    n_plans   = 0
+    n_reports = 0
+    n_infra   = 0
+    n_hitl_r  = 0
+
+    if REMEDIATION_FILE.exists():
+        plan_recs = [json.loads(l) for l in REMEDIATION_FILE.read_text().strip().split("\n") if l.strip()]
+        n_plans   = len([r for r in plan_recs if r.get("event_type") == "PLAN_GENERATED"])
+
+    if REPORTS_DIR.exists():
+        n_reports = len(list(REPORTS_DIR.glob("*.md")))
+
+    if MOCK_INFRA_LOG.exists():
+        infra_recs = [json.loads(l) for l in MOCK_INFRA_LOG.read_text().strip().split("\n") if l.strip()]
+        n_infra = len(infra_recs)
+
+    if HITL_FILE.exists():
+        hitl_all = [json.loads(l) for l in HITL_FILE.read_text().strip().split("\n") if l.strip()]
+        n_hitl_r = sum(1 for h in hitl_all if h.get("source") == "remediation_planner")
+
+    p1.metric("Plans generated",    n_plans)
+    p2.metric("Actions executed",   n_infra)
+    p3.metric("HITL items raised",  n_hitl_r)
+    p4.metric("Incident reports",   n_reports)
+    p5.metric("pydantic-ai model",  "Qwen3-30B")
+
+    if n_plans == 0:
+        st.divider()
+        st.markdown("""
+**Run the pipeline:**
+1. Open `remediation_executor.ipynb`
+2. Run **Cell 1** (installs pydantic-ai)
+3. Run **Cells 2 → 3 → 4 → 5 → 6**
+4. Run **Cell 7** — full end-to-end pipeline
+5. Run **Cell 8** — dashboard plot
+6. Refresh this tab
+        """)
+        st.code("""# Optional: inject a fault first to create live anomalies
+curl -s -X POST http://127.0.0.1:7001/fault/latency -H 'Content-Type: application/json' -d '{"ms":800}'
+curl -s -X POST http://127.0.0.1:7002/fault/errors  -H 'Content-Type: application/json' -d '{"pct":0.30}'""",
+                language="bash")
+    else:
+        # Pipeline plot
+        if PIPELINE_PLOT.exists():
+            st.divider()
+            st.markdown("### 📈 Pipeline Execution Dashboard")
+            st.image(str(PIPELINE_PLOT),
+                     caption="Stage timings · Action results breakdown · RCA confidence + MTTR quality metrics")
+
+        # Latest remediation plans
+        st.divider()
+        st.markdown("### 📋 Remediation Plans")
+        if REMEDIATION_FILE.exists():
+            all_plans = [json.loads(l) for l in REMEDIATION_FILE.read_text().strip().split("\n") if l.strip()]
+            plans_only = [p for p in all_plans if p.get("event_type") == "PLAN_GENERATED"]
+            if plans_only:
+                for plan in reversed(plans_only[-3:]):
+                    actions = plan.get("actions", [])
+                    auto_actions = [a for a in actions if not a.get("requires_approval")]
+                    hitl_actions = [a for a in actions if a.get("requires_approval")]
+                    with st.expander(
+                        f"📋 {plan.get('plan_id','?')} — {plan.get('incident_id','?')} — {plan.get('timestamp','')[:19]}",
+                        expanded=True
+                    ):
+                        st.markdown(f"**RCA Summary:** {plan.get('rca_summary','')}")
+                        col_pl1, col_pl2, col_pl3 = st.columns(3)
+                        col_pl1.metric("Total actions",   len(actions))
+                        col_pl2.metric("⚡ Auto-execute",  len(auto_actions))
+                        col_pl3.metric("⏳ HITL required", len(hitl_actions))
+
+                        st.markdown("**Actions:**")
+                        for a in sorted(actions, key=lambda x: x.get("priority", 9)):
+                            approval = "⏳ HITL" if a.get("requires_approval") else "⚡ AUTO"
+                            blast    = a.get("blast_radius","?")
+                            blast_icon = {"low":"🟢","medium":"🟡","high":"🔴","critical":"💀"}.get(blast,"⚪")
+                            st.markdown(
+                                f"  `[{a.get('priority',0)}]` {approval} **{a.get('action_type','?')}** "
+                                f"→ `{a.get('target_service','?')}` {blast_icon} {blast}  \n"
+                                f"  _{a.get('rationale','')[:80]}_"
+                            )
+                        st.markdown(f"**Rollback:** {plan.get('rollback_plan','')}")
+                        success = plan.get("success_criteria",[])
+                        if success:
+                            st.markdown("**Success criteria:** " + " · ".join(success))
+
+        # Mock infra calls log
+        st.divider()
+        st.markdown("### ⚡ Infra API Call Log")
+        if MOCK_INFRA_LOG.exists() and MOCK_INFRA_LOG.stat().st_size > 0:
+            infra_calls = [json.loads(l) for l in MOCK_INFRA_LOG.read_text().strip().split("\n") if l.strip()]
+            rows = []
+            for c in infra_calls[-20:]:
+                rows.append({
+                    "call_id":  c.get("call_id","?"),
+                    "action":   c.get("action","?"),
+                    "target":   c.get("target","?"),
+                    "status":   "✅ " + c.get("status","?") if c.get("status")=="SUCCESS" else "❌ " + c.get("status","?"),
+                    "latency":  f"{c.get('latency_ms',0)}ms",
+                    "message":  c.get("message","")[:60],
+                    "time":     c.get("timestamp","")[:19],
+                })
+            st.dataframe(pd.DataFrame(rows).astype(str), use_container_width=True)
+        else:
+            st.info("No infra API calls yet — run Cell 7.")
+
+        # Incident reports
+        st.divider()
+        st.markdown("### 📄 Incident Reports")
+        if REPORTS_DIR.exists():
+            report_files = sorted(REPORTS_DIR.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)
+            if report_files:
+                selected = st.selectbox(
+                    "Select report",
+                    [f.name for f in report_files],
+                    key="report_sel"
+                )
+                if selected:
+                    content = (REPORTS_DIR / selected).read_text()
+                    st.markdown(content)
+            else:
+                st.info("No reports yet — run Cell 7.")
+
+        # Audit trail for remediation events
+        st.divider()
+        st.markdown("### 🔍 Remediation Audit Trail")
+        if AUDIT_FILE.exists():
+            audit_all2 = [json.loads(l) for l in AUDIT_FILE.read_text().strip().split("\n") if l.strip()]
+            rem_events = [r for r in audit_all2 if r.get("event_type") in (
+                "RCA_COMPLETE","PLAN_GENERATED","ACTION_EXECUTED",
+                "REMEDIATION_HITL_CREATED","INCIDENT_REPORT_GENERATED"
+            )]
+            if rem_events:
+                trail_rows = []
+                for e in reversed(rem_events[-25:]):
+                    evt = e.get("event_type","?")
+                    icon = {"RCA_COMPLETE":"🧠","PLAN_GENERATED":"📋","ACTION_EXECUTED":"⚡",
+                            "REMEDIATION_HITL_CREATED":"⏳","INCIDENT_REPORT_GENERATED":"📄"}.get(evt,"•")
+                    trail_rows.append({
+                        "time":     e.get("timestamp","")[:19],
+                        "event":    f"{icon} {evt}",
+                        "incident": e.get("incident_id", e.get("plan_id", ""))[-12:],
+                        "detail":   str(e.get("action_type", e.get("severity", e.get("action_count",""))))[:40],
+                        "status":   str(e.get("status",""))[:20],
+                    })
+                st.dataframe(pd.DataFrame(trail_rows).astype(str), use_container_width=True)
+            else:
+                st.info("No remediation events in audit log yet.")
