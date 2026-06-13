@@ -755,8 +755,7 @@ with t10:
 4. Run Cell 5 (loss curve), Cell 6 (threshold), Cell 7 (live scoring)
 5. Refresh this tab — scores appear here
         """)
-        st.code("# Terminal 2 — watch GPU during training:
-watch -n1 rocm-smi --showuse --showmemuse", language="bash")
+        st.code("# Terminal 2 - watch GPU during training:\nwatch -n1 rocm-smi --showuse --showmemuse", language="bash")
 
     # ── Loss curve ────────────────────────────────────────────────────────────
     if AE_LOSS_IMG.exists():
