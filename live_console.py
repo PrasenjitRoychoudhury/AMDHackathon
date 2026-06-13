@@ -14,7 +14,8 @@ st.set_page_config(page_title="AGENTS026 Live Console", page_icon="🖥️", lay
 
 METRICS_CSV = Path("/workspace/shared/minicluster/live_metrics.csv")
 HITL_FILE   = Path("/workspace/shared/hitl_queue.jsonl")
-AUDIT_FILE  = Path("/workspace/shared/audit_log.jsonl")
+AUDIT_FILE    = Path("/workspace/shared/audit_log.jsonl")
+FORECAST_FILE = Path("/workspace/shared/uc3_forecasts.jsonl")
 
 SERVICES = {"payments": 7001, "auth": 7002, "checkout": 7003, "fraud": 7004}
 
@@ -203,9 +204,9 @@ if auto:
 df  = load_metrics()
 lat = latest(df)
 
-t1, t2, t3, t4, t5, t6, t7 = st.tabs([
+t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs([
     "❤️ Health", "📈 Live Telemetry", "⚠️ Anomalies",
-    "💥 Fault Injection", "🤖 AI Actions", "🛑 HITL Queue", "🕸️ Topology"
+    "💥 Fault Injection", "🤖 AI Actions", "🛑 HITL Queue", "🕸️ Topology", "📈 Trend Forecast"
 ])
 
 # TAB 1 — HEALTH
@@ -474,3 +475,119 @@ with t7:
                 st.success("✅ No pending HITL items")
         else:
             st.info("No HITL queue yet")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 8 — UC-3 TREND FORECAST
+# ══════════════════════════════════════════════════════════════════════════════
+with t8:
+    st.subheader("UC-3 — Trend Forecasting Anomaly Detection")
+    st.caption("Linear regression on last 15min → 5min ahead projection · 🧠 GPU advisory on breach trends")
+
+    col_info, col_run = st.columns([5, 1])
+    with col_info:
+        st.info("Forecasts where each service metric will be in 5 minutes. "
+                "🔴 BREACH = projected to exceed threshold. 🟡 APPROACHING = >80% of threshold and rising.")
+    with col_run:
+        run_now = st.button("▶️ Run Forecast")
+
+    st.divider()
+
+    # Load latest forecast file written by notebook
+    if FORECAST_FILE.exists() and FORECAST_FILE.stat().st_size > 0:
+        recs = [json.loads(l) for l in FORECAST_FILE.read_text().strip().split("\n") if l.strip()]
+        fdf  = pd.DataFrame(recs)
+
+        # Colour-coded summary
+        breach     = fdf[fdf["severity"] == "BREACH"]
+        approx     = fdf[fdf["severity"] == "APPROACHING"]
+        ok         = fdf[fdf["severity"] == "OK"]
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("🔴 BREACH forecasts",     len(breach))
+        c2.metric("🟡 APPROACHING forecasts", len(approx))
+        c3.metric("✅ OK",                   len(ok))
+
+        if not breach.empty or not approx.empty:
+            st.divider()
+            st.markdown("### ⚠️ Alert Forecasts")
+            alert_df = pd.concat([breach, approx]).sort_values("pct_of_thresh", ascending=False)
+
+            # Display with colour logic
+            for _, row in alert_df.iterrows():
+                icon = "🔴" if row["severity"] == "BREACH" else "🟡"
+                pct  = row["pct_of_thresh"] * 100
+                bar  = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
+                st.markdown(
+                    f"{icon} **{row['service'].upper()}.{row['metric']}** — "
+                    f"now `{row['current']:.3f}` → projected `{row['projected']:.3f}` "
+                    f"(thresh `{row['threshold']}`) · R²=`{row['r2']:.2f}` · {row['trend']}"
+                )
+                st.progress(min(pct / 100, 1.0), text=f"{pct:.0f}% of threshold")
+
+        st.divider()
+        st.markdown("### 📊 Full Forecast Table")
+
+        # Add colour column
+        def sev_icon(s):
+            return "🔴" if s == "BREACH" else ("🟡" if s == "APPROACHING" else "✅")
+        fdf["status"] = fdf["severity"].apply(sev_icon)
+        display_cols = ["status","service","metric","current","projected","threshold",
+                        "pct_of_thresh","r2","trend","delta"]
+        st.dataframe(fdf[[c for c in display_cols if c in fdf.columns]]
+                     .sort_values("pct_of_thresh", ascending=False),
+                     use_container_width=True)
+
+        # Mini spark chart — projected vs current per service
+        st.divider()
+        st.markdown("### 📉 Projection Comparison by Metric")
+        metric_sel = st.selectbox("Metric", list(THRESHOLDS.keys()), key="uc3_metric")
+        metric_df  = fdf[fdf["metric"] == metric_sel]
+        if not metric_df.empty:
+            fig, ax = plt.subplots(figsize=(8, 3))
+            fig.patch.set_facecolor("#0e1117")
+            ax.set_facecolor("#0e1117")
+            ax.tick_params(colors="white")
+            for spine in ax.spines.values(): spine.set_edgecolor("#444")
+
+            x      = np.arange(len(metric_df))
+            width  = 0.35
+            svcs   = metric_df["service"].tolist()
+            thresh = THRESHOLDS[metric_sel][1]
+
+            bars1 = ax.bar(x - width/2, metric_df["current"],   width, label="Current",   color="#00d4ff", alpha=0.8)
+            bars2 = ax.bar(x + width/2, metric_df["projected"], width, label="Projected",
+                           color=[("#ff1744" if p > thresh else "#ffd600") for p in metric_df["projected"]], alpha=0.8)
+            ax.axhline(thresh, color="#ff4444", linestyle="--", linewidth=1.5, label=f"Threshold ({thresh})")
+            ax.set_xticks(x); ax.set_xticklabels(svcs, color="white")
+            ax.legend(facecolor="#1a1a2e", labelcolor="white", fontsize=8)
+            ax.set_title(f"{metric_sel} — Current vs 5min Forecast", color="white", fontsize=10)
+            st.pyplot(fig); plt.close()
+
+        # Latest GPU advisory from audit log
+        st.divider()
+        st.markdown("### 🧠 Latest GPU Advisory")
+        if AUDIT_FILE.exists():
+            audit_recs = [json.loads(l) for l in AUDIT_FILE.read_text().strip().split("\n")
+                          if l.strip()]
+            uc3_audits = [r for r in audit_recs if r.get("event_type") == "UC3_FORECAST_ALERTS"
+                          and r.get("narrative")]
+            if uc3_audits:
+                latest_advisory = sorted(uc3_audits, key=lambda x: x.get("timestamp",""))[-1]
+                st.warning(latest_advisory["narrative"])
+                st.caption(f"Generated at {latest_advisory.get('timestamp','')}")
+            else:
+                st.info("No GPU advisory yet — run the UC-3 forecast notebook cell with active alerts.")
+        else:
+            st.info("No audit log yet.")
+
+    else:
+        st.info("No forecast data yet. Run **Cell 11** in the RCA notebook to generate forecasts.")
+        st.markdown("""
+**Quick start:**
+1. Open `agents026_rca_agent.ipynb` in Jupyter
+2. Run **Cell 11** (UC-3 Trend Forecasting)
+3. Come back and click **Refresh now** — forecast data will appear here
+
+To create a visible trend: inject escalating latency using the **Fault Injection** tab,
+then run the forecast cell after a few minutes.
+        """)
