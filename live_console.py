@@ -200,36 +200,320 @@ def draw_topology(latest_metrics):
     ax.set_title("Live Service Dependency Graph — AGENTS026", color="white", fontsize=12, pad=10)
     return fig, scores
 
-# ── header ────────────────────────────────────────────────────────────────────
-st.title("🖥️ AGENTS026 — Live SRE Console")
-st.caption("AMD Instinct MI300X · Qwen3-30B via vLLM · MiniCluster banking stack")
+# ══════════════════════════════════════════════════════════════════════════════
+# PROFESSIONAL CSS INJECTION
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-col_ref, col_auto = st.columns([6, 1])
-with col_ref:
-    if st.button("🔄 Refresh now"):
-        st.cache_data.clear()
-with col_auto:
-    auto = st.toggle("Auto-refresh (10s)", value=False)
-if auto:
-    time.sleep(10)
-    st.cache_data.clear()
-    st.rerun()
+/* ── Global reset ── */
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif !important;
+}
+.main { background: #080c14 !important; }
+section[data-testid="stSidebar"] {
+    background: #0d1117 !important;
+    border-right: 1px solid #1e2d40 !important;
+    min-width: 220px !important;
+    max-width: 220px !important;
+}
 
+/* ── Sidebar nav items ── */
+.nav-section {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #3d5a7a;
+    text-transform: uppercase;
+    padding: 18px 16px 6px 16px;
+}
+.nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 16px;
+    border: none;
+    background: transparent;
+    color: #7a9ab5;
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    text-align: left;
+    border-radius: 0;
+    transition: all 0.15s ease;
+    border-left: 3px solid transparent;
+    font-family: 'Inter', sans-serif;
+}
+.nav-btn:hover { background: #131d2b; color: #c8dff0; border-left-color: #1e4a6e; }
+.nav-btn.active { background: #0e2037; color: #38b2f4; border-left-color: #38b2f4; font-weight: 600; }
+.nav-icon { font-size: 14px; width: 18px; text-align: center; }
+.nav-badge {
+    margin-left: auto;
+    background: #ff1744;
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+}
+.nav-badge.warn { background: #f59e0b; }
+.nav-badge.ok   { background: #00c853; }
+
+/* ── Top header bar ── */
+.top-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0 20px 0;
+    border-bottom: 1px solid #1a2940;
+    margin-bottom: 24px;
+}
+.top-header-left h1 {
+    font-size: 20px !important;
+    font-weight: 700 !important;
+    color: #e8f4fd !important;
+    margin: 0 !important;
+    letter-spacing: -0.3px;
+}
+.top-header-left p {
+    font-size: 11px !important;
+    color: #3d6a8a !important;
+    margin: 2px 0 0 0 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+}
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+}
+.status-pill.live { background: #0a2a0f; border: 1px solid #00c853; color: #00c853; }
+.status-pill.warn { background: #2a1a00; border: 1px solid #f59e0b; color: #f59e0b; }
+
+/* ── Page title inside content ── */
+.page-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #e8f4fd;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.2px;
+}
+.page-subtitle {
+    font-size: 12px;
+    color: #3d6a8a;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 20px;
+}
+
+/* ── Metric cards ── */
+[data-testid="stMetric"] {
+    background: #0d1a27 !important;
+    border: 1px solid #1a2f45 !important;
+    border-radius: 8px !important;
+    padding: 14px 16px !important;
+}
+[data-testid="stMetricLabel"] { color: #5a8aaa !important; font-size: 11px !important; font-weight: 500 !important; text-transform: uppercase; letter-spacing: 0.05em; }
+[data-testid="stMetricValue"] { color: #e8f4fd !important; font-size: 22px !important; font-weight: 700 !important; font-family: 'JetBrains Mono', monospace !important; }
+
+/* ── Buttons ── */
+[data-testid="stButton"] > button {
+    background: #0e2037 !important;
+    border: 1px solid #1e4a6e !important;
+    color: #38b2f4 !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+    border-radius: 6px !important;
+    transition: all 0.15s !important;
+}
+[data-testid="stButton"] > button:hover {
+    background: #132d50 !important;
+    border-color: #38b2f4 !important;
+}
+[data-testid="stButton"] > button[kind="primary"] {
+    background: #0a3d6b !important;
+    border-color: #38b2f4 !important;
+    color: #ffffff !important;
+}
+
+/* ── Dataframes ── */
+[data-testid="stDataFrame"] {
+    border: 1px solid #1a2f45 !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+}
+
+/* ── Expanders ── */
+[data-testid="stExpander"] {
+    background: #0d1a27 !important;
+    border: 1px solid #1a2f45 !important;
+    border-radius: 8px !important;
+}
+
+/* ── Info / warning / success / error boxes ── */
+[data-testid="stAlert"] { border-radius: 8px !important; border-left-width: 3px !important; }
+
+/* ── Divider ── */
+hr { border-color: #1a2940 !important; }
+
+/* ── Sidebar logo area ── */
+.sidebar-logo {
+    padding: 20px 16px 12px 16px;
+    border-bottom: 1px solid #1e2d40;
+    margin-bottom: 4px;
+}
+.sidebar-logo-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #38b2f4;
+    letter-spacing: 0.05em;
+}
+.sidebar-logo-sub {
+    font-size: 10px;
+    color: #2d4a62;
+    margin-top: 2px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Hide default streamlit chrome ── */
+#MainMenu, footer, header { visibility: hidden; }
+[data-testid="stDecoration"] { display: none; }
+</style>
+""", unsafe_allow_html=True)
+
+# ── Data load ─────────────────────────────────────────────────────────────────
 df  = load_metrics()
 lat = latest(df)
 
-t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14 = st.tabs([
-    "❤️ Health", "📈 Live Telemetry", "⚠️ Anomalies",
-    "💥 Fault Injection", "🤖 AI Actions", "🛑 HITL Queue",
-    "🕸️ Topology", "📈 Trend Forecast", "🔇 Silence", "🤖 AE Detector",
-    "🔥 Chaos Scheduler", "🔎 FAISS Search", "⛈️ Alert Storm", "📜 Log Embedding"
-])
+# ── Compute live alert count for sidebar badges ───────────────────────────────
+_live_alerts = 0
+_hitl_pending = 0
+if not lat.empty:
+    for _, _row in lat.iterrows():
+        for _col, (_label, _thresh, _unit) in THRESHOLDS.items():
+            if float(_row[_col]) > _thresh:
+                _live_alerts += 1
+if HITL_FILE.exists() and HITL_FILE.stat().st_size > 0:
+    try:
+        _hitl_pending = sum(1 for l in open(HITL_FILE) if '"PENDING"' in l)
+    except: pass
+
+# ── Sidebar ───────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("""
+    <div class="sidebar-logo">
+        <div class="sidebar-logo-title">⬡ AGENTS026</div>
+        <div class="sidebar-logo-sub">AMD MI300X · Qwen3-30B</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Auto-refresh toggle
+    auto = st.toggle("Auto-refresh (10s)", value=False)
+    if st.button("🔄 Refresh", use_container_width=True):
+        st.cache_data.clear()
+    if auto:
+        time.sleep(10); st.cache_data.clear(); st.rerun()
+
+    st.divider()
+
+    # Nav groups
+    NAV_PAGES = [
+        ("MONITORING",  [
+            ("health",    "❤️", "Health",         None),
+            ("telemetry", "📈", "Live Telemetry",  None),
+            ("anomalies", "⚠️", "Anomalies",       str(_live_alerts) if _live_alerts else None),
+            ("topology",  "🕸️", "Topology",        None),
+            ("silence",   "🔇", "Silence",         None),
+        ]),
+        ("INTELLIGENCE", [
+            ("ae",        "🤖", "AE Detector",     None),
+            ("forecast",  "📉", "Trend Forecast",   None),
+            ("faiss",     "🔎", "FAISS Search",     None),
+            ("logembed",  "📜", "Log Embedding",    None),
+        ]),
+        ("OPERATIONS", [
+            ("faults",    "💥", "Fault Injection",  None),
+            ("chaos",     "🔥", "Chaos Scheduler",  None),
+            ("alertstorm","⛈️", "Alert Storm UC-4", None),
+            ("hitl",      "🛑", "HITL Queue",       str(_hitl_pending) if _hitl_pending else None),
+            ("aiactions", "🤖", "AI Actions",       None),
+        ]),
+    ]
+
+    # Determine active page from session state
+    if "page" not in st.session_state:
+        st.session_state.page = "health"
+
+    for section_name, items in NAV_PAGES:
+        st.markdown(f'<div class="nav-section">{section_name}</div>', unsafe_allow_html=True)
+        for page_id, icon, label, badge in items:
+            is_active = st.session_state.page == page_id
+            badge_html = ""
+            if badge:
+                badge_class = "warn" if page_id == "anomalies" else ("warn" if page_id == "hitl" else "ok")
+                badge_html = f'<span class="nav-badge {badge_class}">{badge}</span>'
+            active_class = "active" if is_active else ""
+            clicked = st.button(
+                f"{icon}  {label}",
+                key=f"nav_{page_id}",
+                use_container_width=True,
+            )
+            if clicked:
+                st.session_state.page = page_id
+                st.rerun()
+
+    st.divider()
+    # GPU status pill
+    if LLM_AVAILABLE:
+        st.markdown('<div style="padding:8px 16px"><span class="status-pill live">● GPU LIVE</span></div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div style="padding:8px 16px"><span class="status-pill warn">⚠ GPU OFF</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="padding:4px 16px 8px;font-size:10px;color:#2d4a62;font-family:JetBrains Mono,monospace">{datetime.now().strftime("%H:%M:%S UTC")}</div>', unsafe_allow_html=True)
+
+# ── Page router — replaces st.tabs() ─────────────────────────────────────────
+_PAGE = st.session_state.get("page", "health")
+
+# Helper: page header
+def page_header(title, subtitle=""):
+    st.markdown(f'<div class="page-title">{title}</div>', unsafe_allow_html=True)
+    if subtitle:
+        st.markdown(f'<div class="page-subtitle">{subtitle}</div>', unsafe_allow_html=True)
+
+# Shim: content blocks now use if/elif instead of with t1/t2...
+# We map old tab variables to a simple context manager shim
+class _PageBlock:
+    def __init__(self, active): self._active = active
+    def __enter__(self): return self
+    def __exit__(self, *a): pass
+    def __bool__(self): return self._active
+
+t1  = _PageBlock(_PAGE == "health")
+t2  = _PageBlock(_PAGE == "telemetry")
+t3  = _PageBlock(_PAGE == "anomalies")
+t4  = _PageBlock(_PAGE == "faults")
+t5  = _PageBlock(_PAGE == "aiactions")
+t6  = _PageBlock(_PAGE == "hitl")
+t7  = _PageBlock(_PAGE == "topology")
+t8  = _PageBlock(_PAGE == "forecast")
+t9  = _PageBlock(_PAGE == "silence")
+t10 = _PageBlock(_PAGE == "ae")
+t11 = _PageBlock(_PAGE == "chaos")
+t12 = _PageBlock(_PAGE == "faiss")
+t13 = _PageBlock(_PAGE == "alertstorm")
+t14 = _PageBlock(_PAGE == "logembed")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS 1–10 — unchanged from original
 # ══════════════════════════════════════════════════════════════════════════════
 
-with t1:
+if t1:
+    page_header("❤️  Cluster Health", "Real-time service status · 4 services · MI300X")
     st.subheader("Current cluster health")
     if lat.empty:
         st.warning("No metrics yet — waiting for collector...")
@@ -258,7 +542,8 @@ with t1:
         st.error("⚠️  One or more services breaching thresholds") if any_bad else st.success("✅  All services within normal thresholds")
         st.caption(f"Last updated: {lat['timestamp'].max()}")
 
-with t2:
+if t2:
+    page_header("📈  Live Telemetry", "30-minute rolling metrics · all services")
     st.subheader("Live telemetry — last 30 minutes")
     if df.empty:
         st.warning("No data yet.")
@@ -284,7 +569,8 @@ with t2:
         st.pyplot(fig); plt.close()
         st.dataframe(filtered.sort_values("timestamp", ascending=False).head(40), use_container_width=True)
 
-with t3:
+if t3:
+    page_header("⚠️  Anomaly Detection", "Threshold + AE model · escalate to HITL")
     st.subheader("Threshold-based anomaly detection")
     if lat.empty:
         st.warning("No data yet.")
@@ -314,7 +600,8 @@ with t3:
         else:
             st.success("✅  No anomalies — all metrics within threshold")
 
-with t4:
+if t4:
+    page_header("💥  Fault Injection", "Live fault control panel · clear when done")
     st.subheader("Fault injection control panel")
     st.warning("⚠️  These faults hit the live MiniCluster. Clear when done.")
     target = st.selectbox("Target service", list(SERVICES.keys()), key="fi_svc")
@@ -353,7 +640,8 @@ with t4:
         write_audit({"event_type":"FAULT_CLEAR_ALL","results":results,"timestamp":ts()})
         st.success(f"All faults cleared: {results}")
 
-with t5:
+if t5:
+    page_header("🤖  AI Actions Log", "All GPU decisions + audit trail")
     st.subheader("AI-decided actions log")
     st.info("Actions requiring approval appear in the HITL Queue tab.")
     if AUDIT_FILE.exists():
@@ -374,7 +662,8 @@ with t5:
     else:
         st.info("Audit log not yet created.")
 
-with t6:
+if t6:
+    page_header("🛑  HITL Queue", "Human-in-the-Loop approvals · pending items")
     st.subheader("Human-in-the-Loop approval queue")
     if not HITL_FILE.exists() or HITL_FILE.stat().st_size == 0:
         st.info("No pending HITL items.")
@@ -414,7 +703,8 @@ with t6:
             st.divider(); st.markdown("### ✅ Resolved items")
             st.dataframe(pd.DataFrame(resolved), use_container_width=True)
 
-with t7:
+if t7:
+    page_header("🕸️  Service Topology", "Live dependency graph · GPU insight on anomalies")
     st.subheader("Live Service Dependency Graph")
     st.caption("🟢 Healthy  🟡 Degraded  🔴 Critical · Edge colour follows call-path health · GPU insight powered by Qwen3-30B")
     latest_metrics = get_latest_dict(df)
@@ -481,7 +771,8 @@ with t7:
         else:
             st.info("No HITL queue yet")
 
-with t8:
+if t8:
+    page_header("📉  Trend Forecast UC-3", "Linear regression → 5-min projection")
     st.subheader("UC-3 — Trend Forecasting Anomaly Detection")
     st.caption("Linear regression on last 15min → 5min ahead projection · 🧠 GPU advisory on breach trends")
     col_info, col_run = st.columns([5, 1])
@@ -551,7 +842,8 @@ with t8:
     else:
         st.info("No forecast data yet. Run **Cell 11** in the RCA notebook to generate forecasts.")
 
-with t9:
+if t9:
+    page_header("🔇  Silence Detection UC-5", "Gap · flatline · zero-RPS detection")
     st.subheader("UC-5 — Silent Failure / Absence of Signal Detection")
     st.caption("Detects services that stopped reporting, flatlined, or dropped to zero traffic · 🧠 GPU reasoning on findings")
     st.info("**Three detection modes:** 🔴 **Gap** — service not reported in >3min. 🟡 **Flatline** — metric std dev ≈ 0. 🟡 **Zero-RPS** — service alive but serving no traffic.")
@@ -595,7 +887,8 @@ with t9:
     else:
         st.info("No silence analysis yet. Run **Cell 15** (UC-5) in the notebook.")
 
-with t10:
+if t10:
+    page_header("🤖  AE Anomaly Detector", "PyTorch autoencoder on MI300X · reconstruction error")
     st.subheader("🤖 GPU Autoencoder Anomaly Detection")
     st.caption("PyTorch autoencoder trained on MI300X · Reconstruction error flags subtle anomalies · Qwen3-30B RCA on triggers")
     st.info("**Why this catches what thresholds miss:** The autoencoder learns the *correlation pattern* between metrics during healthy operation. An anomaly score > 1.0 means the current metric combination is unlike anything in the baseline.")
@@ -663,7 +956,8 @@ with t10:
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 11 — CHAOS SCHEDULER
 # ══════════════════════════════════════════════════════════════════════════════
-with t11:
+if t11:
+    page_header("🔥  Chaos Scheduler UC-6", "GPU-selected scenarios · autonomous inject/monitor/clear")
     st.subheader("🔥 Chaos Scheduler — UC-6")
     st.caption("GPU-selected fault scenarios · autonomous inject → monitor → clear loop · HITL gate on CRITICAL blasts")
     st.info("**How it works:** Qwen3-30B reads live metrics and selects the most impactful chaos scenario. Faults fire automatically, metrics snapshotted pre/post, GPU writes a post-mortem. CRITICAL blast-radius scenarios require HITL approval.")
@@ -762,7 +1056,8 @@ with t11:
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 12 — FAISS VECTOR SEARCH
 # ══════════════════════════════════════════════════════════════════════════════
-with t12:
+if t12:
+    page_header("🔎  FAISS Semantic Search UC-7", "BGE-large on MI300X · evidence-backed RCA")
     st.subheader("🔎 FAISS Semantic Incident Search — UC-7")
     st.caption("BGE-large embeddings on MI300X · FAISS IndexFlatIP · evidence-backed RCA via retrieval")
     st.info("**Why this matters:** When a new anomaly fires, semantic search retrieves the 3 most similar past incidents from the vector store. The RCA agent gets real evidence instead of guessing from scratch.")
@@ -829,7 +1124,8 @@ with t12:
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 13 — ALERT STORM UC-4
 # ══════════════════════════════════════════════════════════════════════════════
-with t13:
+if t13:
+    page_header("⛈️  Alert Storm Correlation UC-4", "NetworkX clustering · consolidated GPU RCA · LLM-as-Judge")
     st.subheader("⛈️ Alert Storm Correlation — UC-4")
     st.caption("NetworkX graph clustering groups correlated alerts · ONE GPU RCA call per group · LLM-as-Judge quality scoring")
     st.info("**AIOps differentiator:** When 10+ alerts fire simultaneously, UC-4 groups them by service dependency graph. One consolidated RCA call per group — not 10 separate calls. Reduces LLM cost 60–80% during alert storms.")
@@ -926,7 +1222,8 @@ with t13:
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 14 — LOG EMBEDDING
 # ══════════════════════════════════════════════════════════════════════════════
-with t14:
+if t14:
+    page_header("📜  Log Embedding UC-8", "BGE log index on MI300X · semantic search · GPU narrative")
     st.subheader("📜 Log Embedding — UC-8")
     st.caption("BGE-large semantic log search on MI300X · FAISS log index · GPU narrative from anomalous clusters")
     st.info("**What this enables:** Every log entry is embedded as a vector. Searching 'payment gateway timeout' retrieves semantically similar log lines across all services — not just keyword matches. Anomalous log clusters feed directly into GPU narrative generation.")
