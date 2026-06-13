@@ -17,6 +17,9 @@ HITL_FILE   = Path("/workspace/shared/hitl_queue.jsonl")
 AUDIT_FILE    = Path("/workspace/shared/audit_log.jsonl")
 FORECAST_FILE = Path("/workspace/shared/uc3_forecasts.jsonl")
 SILENCE_FILE  = Path("/workspace/shared/uc5_silence.jsonl")
+SCORES_FILE   = Path("/workspace/shared/ae_scores.jsonl")
+AE_LOSS_IMG   = Path("/workspace/shared/ae_loss_curve.png")
+SCALER_PATH   = Path("/workspace/shared/autoencoder_scaler.json")
 
 SERVICES = {"payments": 7001, "auth": 7002, "checkout": 7003, "fraud": 7004}
 
@@ -205,10 +208,10 @@ if auto:
 df  = load_metrics()
 lat = latest(df)
 
-t1, t2, t3, t4, t5, t6, t7, t8, t9 = st.tabs([
+t1, t2, t3, t4, t5, t6, t7, t8, t9, t10 = st.tabs([
     "❤️ Health", "📈 Live Telemetry", "⚠️ Anomalies",
     "💥 Fault Injection", "🤖 AI Actions", "🛑 HITL Queue",
-    "🕸️ Topology", "📈 Trend Forecast", "🔇 Silence"
+    "🕸️ Topology", "📈 Trend Forecast", "🔇 Silence", "🤖 AE Detector"
 ])
 
 # TAB 1 — HEALTH
@@ -705,3 +708,194 @@ supervisorctl -c /workspace/shared/minicluster/supervisord.conf stop collector
 # Restore:
 supervisorctl -c /workspace/shared/minicluster/supervisord.conf restart collector""",
             language="bash")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 10 — AUTOENCODER ANOMALY DETECTOR
+# ══════════════════════════════════════════════════════════════════════════════
+with t10:
+    st.subheader("🤖 GPU Autoencoder Anomaly Detection")
+    st.caption("PyTorch autoencoder trained on MI300X · Reconstruction error flags subtle anomalies · Qwen3-30B RCA on triggers")
+
+    st.info(
+        "**Why this catches what thresholds miss:** The autoencoder learns the *correlation pattern* "
+        "between metrics during healthy operation. An anomaly score > 1.0 means the current metric "
+        "combination is unlike anything in the baseline — even if no single metric crosses a threshold."
+    )
+    st.divider()
+
+    # ── Model status ──────────────────────────────────────────────────────────
+    st.markdown("### 🏋️ Model Status")
+    mc1, mc2, mc3 = st.columns(3)
+
+    model_exists  = Path("/workspace/shared/autoencoder_model.pt").exists()
+    scaler_exists = SCALER_PATH.exists()
+
+    mc1.metric("Model file",   "✅ Trained" if model_exists  else "❌ Not trained")
+    mc2.metric("Scaler file",  "✅ Ready"   if scaler_exists else "❌ Missing")
+
+    if scaler_exists:
+        try:
+            with open(SCALER_PATH) as f:
+                sc = json.load(f)
+            thresh = sc.get("anomaly_threshold", "N/A")
+            mc3.metric("Anomaly threshold", f"{thresh:.6f}" if isinstance(thresh, float) else thresh)
+            st.caption(f"Features: {sc.get('cols', [])}")
+        except:
+            mc3.metric("Anomaly threshold", "Parse error")
+    else:
+        mc3.metric("Anomaly threshold", "Not set")
+
+    if not model_exists:
+        st.warning("Model not trained yet. Run **ae_anomaly_detector.ipynb** Cells 1→6 to train on GPU.")
+        st.markdown("""
+**Quick start:**
+1. Open `ae_anomaly_detector.ipynb` in Jupyter
+2. Run Cell 1 (GPU check), Cell 2 (architecture), Cell 3 (data prep)
+3. Run Cell 4 — watch `rocm-smi` spike in Terminal 2 during training
+4. Run Cell 5 (loss curve), Cell 6 (threshold), Cell 7 (live scoring)
+5. Refresh this tab — scores appear here
+        """)
+        st.code("# Terminal 2 — watch GPU during training:
+watch -n1 rocm-smi --showuse --showmemuse", language="bash")
+
+    # ── Loss curve ────────────────────────────────────────────────────────────
+    if AE_LOSS_IMG.exists():
+        st.divider()
+        st.markdown("### 📉 Training Loss Curve (GPU)")
+        st.image(str(AE_LOSS_IMG), caption="Autoencoder MSE loss over epochs — trained on AMD MI300X")
+
+    # ── Live scores ───────────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🔍 Live Reconstruction Error Scores")
+
+    if SCORES_FILE.exists() and SCORES_FILE.stat().st_size > 0:
+        scores = [json.loads(l) for l in SCORES_FILE.read_text().strip().split("\n") if l.strip()]
+        sdf    = pd.DataFrame(scores)
+        sdf["timestamp"] = pd.to_datetime(sdf["timestamp"])
+        sdf = sdf.sort_values("timestamp")
+
+        n_total  = len(sdf)
+        n_anom   = sdf["is_anomaly"].sum()
+        n_warn   = (sdf["severity"] == "WARN").sum()
+        n_ok     = (sdf["severity"] == "OK").sum()
+
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        sc1.metric("Total timesteps", n_total)
+        sc2.metric("🔴 Anomalies",    int(n_anom))
+        sc3.metric("🟡 Warnings",     int(n_warn))
+        sc4.metric("✅ Normal",        int(n_ok))
+
+        # Reconstruction error time series
+        st.divider()
+        fig, ax = plt.subplots(figsize=(11, 3))
+        fig.patch.set_facecolor("#0e1117")
+        ax.set_facecolor("#0e1117")
+        ax.tick_params(colors="white")
+        ax.xaxis.label.set_color("white")
+        ax.yaxis.label.set_color("white")
+        for spine in ax.spines.values(): spine.set_edgecolor("#444")
+
+        # Normal points
+        ok_df   = sdf[~sdf["is_anomaly"]]
+        anom_df = sdf[sdf["is_anomaly"]]
+
+        ax.plot(sdf["timestamp"], sdf["recon_error"],
+                color="#00d4ff", linewidth=1.2, alpha=0.7, label="Reconstruction error")
+
+        if not anom_df.empty:
+            ax.scatter(anom_df["timestamp"], anom_df["recon_error"],
+                       color="#ff1744", s=60, zorder=5, label="🔴 Anomaly")
+
+        # Threshold line
+        if scaler_exists:
+            try:
+                with open(SCALER_PATH) as f:
+                    sc2_data = json.load(f)
+                thr = sc2_data.get("anomaly_threshold")
+                if thr:
+                    ax.axhline(thr, color="#ffd600", linestyle="--",
+                               linewidth=1.5, label=f"Threshold ({thr:.4f})")
+            except:
+                pass
+
+        ax.legend(facecolor="#1a1a2e", labelcolor="white", fontsize=8)
+        ax.set_xlabel("Time", color="white")
+        ax.set_ylabel("Reconstruction Error", color="white")
+        ax.set_title("Autoencoder Reconstruction Error — Live Metrics", color="white", fontsize=10)
+        st.pyplot(fig)
+        plt.close()
+
+        # Anomaly score distribution
+        st.divider()
+        st.markdown("#### Anomaly Score Distribution (score > 1.0 = anomaly)")
+        fig2, ax2 = plt.subplots(figsize=(8, 2.5))
+        fig2.patch.set_facecolor("#0e1117")
+        ax2.set_facecolor("#0e1117")
+        ax2.tick_params(colors="white")
+        for spine in ax2.spines.values(): spine.set_edgecolor("#444")
+        ax2.hist(sdf["anomaly_score"], bins=30, color="#00d4ff", alpha=0.7, edgecolor="#0e1117")
+        ax2.axvline(1.0, color="#ff1744", linestyle="--", linewidth=2, label="Anomaly threshold (1.0)")
+        ax2.legend(facecolor="#1a1a2e", labelcolor="white", fontsize=8)
+        ax2.set_xlabel("Anomaly score (recon_error / threshold)", color="white")
+        ax2.set_ylabel("Count", color="white")
+        st.pyplot(fig2)
+        plt.close()
+
+        # Recent anomalies table
+        if not anom_df.empty:
+            st.divider()
+            st.markdown("#### 🔴 Recent Anomalous Timesteps")
+            st.dataframe(
+                anom_df[["timestamp","recon_error","anomaly_score","severity"]]
+                .sort_values("timestamp", ascending=False).head(20),
+                use_container_width=True
+            )
+
+        # Full table
+        st.divider()
+        st.markdown("#### Full Score Table (last 50)")
+        st.dataframe(
+            sdf[["timestamp","recon_error","threshold","anomaly_score","severity","is_anomaly"]]
+            .sort_values("timestamp", ascending=False).head(50),
+            use_container_width=True
+        )
+
+    else:
+        st.info("No AE scores yet. Run Cell 7 (live scoring) in `ae_anomaly_detector.ipynb`.")
+
+    # ── GPU RCA audit entries ──────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🧠 GPU RCA Log (AE-triggered)")
+    if AUDIT_FILE.exists():
+        audit_recs = [json.loads(l) for l in AUDIT_FILE.read_text().strip().split("\n") if l.strip()]
+        ae_rca = [r for r in audit_recs if r.get("event_type") in ("AE_RCA_COMPLETE","AE_HITL_CREATED","AE_TRAINED","AE_RETRAINED")]
+        if ae_rca:
+            ae_df = pd.DataFrame(ae_rca)
+            ae_df = ae_df.sort_values("timestamp", ascending=False) if "timestamp" in ae_df.columns else ae_df
+            st.dataframe(ae_df[["timestamp","event_type"] + [c for c in ["anomaly_count","rca","threshold","loss"] if c in ae_df.columns]],
+                         use_container_width=True)
+        else:
+            st.info("No AE audit events yet.")
+    else:
+        st.info("No audit log yet.")
+
+    st.divider()
+    st.markdown("### ⚡ Inject fault to trigger AE anomaly")
+    ae_svc  = st.selectbox("Service", list(SERVICES.keys()), key="ae_svc")
+    ae_port = SERVICES[ae_svc]
+    ac1, ac2, ac3 = st.columns(3)
+    with ac1:
+        if st.button("🐢 500ms latency", key="ae_lat"):
+            r = fault_post(ae_port, "/fault/latency", {"ms": 500})
+            write_audit({"event_type":"FAULT_INJECT","service":ae_svc,"fault":"latency","timestamp":ts()})
+            st.success(str(r))
+    with ac2:
+        if st.button("💥 30% errors", key="ae_err"):
+            r = fault_post(ae_port, "/fault/errors", {"pct": 0.3})
+            write_audit({"event_type":"FAULT_INJECT","service":ae_svc,"fault":"errors","timestamp":ts()})
+            st.success(str(r))
+    with ac3:
+        if st.button("🧹 Clear all", key="ae_clear"):
+            clear_all_faults()
+            write_audit({"event_type":"FAULT_CLEAR_ALL","timestamp":ts()})
+            st.success("Cleared")
